@@ -35,3 +35,33 @@
 .refresh-icon.spinning{animation:refresh-spin .8s linear infinite}
 @keyframes refresh-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.refresh-icon.spinning{animation:none}}
+.shell[data-theme=light]{--theme-bg:246,249,253;--theme-panel:224,232,245;--theme-accent:#5872c7;--theme-accent-rgb:88,114,199;--theme-text:#20283c;--theme-muted:#626b80;--theme-line:rgba(32,45,70,.17)}
+.shell[data-theme=vintage]{--theme-bg:241,230,210;--theme-panel:222,201,167;--theme-accent:#9e5a3a;--theme-accent-rgb:158,90,58;--theme-text:#3d2e24;--theme-muted:#786657;--theme-line:rgba(76,49,30,.2)}
+.shell:is([data-theme=light],[data-theme=vintage]){color-scheme:light;border-color:var(--theme-line);box-shadow:0 22px 75px rgba(35,31,25,.18)}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.topbar,.agenda,.agenda-date,.setting-row,.calendar-visibility){border-color:var(--theme-line)}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.grid,.cell,.month-nav .today-button){border-color:var(--theme-line)}
+.shell:is([data-theme=light],[data-theme=vintage]) .topbar{background:rgba(var(--theme-accent-rgb),.08)}
+.shell:is([data-theme=light],[data-theme=vintage]) .agenda{background:rgba(var(--theme-panel),.32)}
+.shell:is([data-theme=light],[data-theme=vintage]) .cell{color:var(--theme-text);background:rgba(255,255,255,.18)}
+.shell:is([data-theme=light],[data-theme=vintage]) .cell.outside{color:var(--theme-muted);background:rgba(35,31,25,.035)}
+.shell:is([data-theme=light],[data-theme=vintage]) .cell.selected{background:rgba(var(--theme-accent-rgb),.18);box-shadow:inset 0 0 0 1px var(--theme-accent)}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.weekdays div,.brand small,.agenda-date p,.event-time,.empty,.calendar-foot,.aside-foot,.settings .muted,.setting-row small,.more){color:var(--theme-muted)}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.top-actions button,.month-nav button,.section-title button,.calendar-foot button,.calendar-visibility summary,.calendar-options label,.setting-row p,.settings label,.modal label,.task-title){color:var(--theme-text)}
+.shell:is([data-theme=light],[data-theme=vintage]) .top-actions button:hover{background:rgba(var(--theme-accent-rgb),.15)}
+.shell:is([data-theme=light],[data-theme=vintage]) .event-chip{background:rgba(255,255,255,.55);color:var(--theme-text)}
+.shell:is([data-theme=light],[data-theme=vintage]) .task-chip{color:#2b6d64}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.agenda-event,.secondary){background:rgba(255,255,255,.45);color:var(--theme-text)}
+.shell:is([data-theme=light],[data-theme=vintage]) .agenda-event:hover{background:rgba(255,255,255,.7)}
+.shell:is([data-theme=light],[data-theme=vintage]) .primary{color:#fff}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.brand-icon,.cell.today .day-number){color:#fff}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.settings section,.modal){background:rgba(var(--theme-panel),.88);border-color:var(--theme-line);color:var(--theme-text)}
+.shell:is([data-theme=light],[data-theme=vintage]) :is(.settings input:not([type=checkbox]):not([type=range]),.settings select,.modal input:not([type=checkbox]),.modal select,.modal textarea){background:rgba(255,255,255,.72);color:var(--theme-text);border-color:var(--theme-line)}
+.shell:is([data-theme=light],[data-theme=vintage]) .notice{background:rgba(var(--theme-accent-rgb),.18);color:var(--theme-text)}
+.shell:is([data-theme=light],[data-theme=vintage]) .status{color:#176947}
+.shell:is([data-theme=light],[data-theme=vintage]) .status.offline{color:#925929}
+.theme-select-row{display:flex;align-items:center;gap:10px}
+.theme-select-row select{flex:1;min-width:0}
+.theme-swatch{display:inline-block;flex:none;width:20px;height:20px;margin-top:8px;border-radius:50%;border:1px solid rgba(128,128,128,.35);box-shadow:0 0 0 3px rgba(128,128,128,.1)}
+.modal{max-height:calc(100vh - 32px);overflow:auto}
+.time-row label{min-width:0}
+.shell:not([data-theme=light]):not([data-theme=vintage]) .modal input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.85;cursor:pointer}

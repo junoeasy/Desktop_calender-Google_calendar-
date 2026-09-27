@@ -13,13 +13,15 @@ use tauri_plugin_autostart::ManagerExt;
 
 struct AppState { store: Storage, auth: Auth, google: Google, month: Mutex<String> }
 fn current_month() -> String { let d = Local::now(); format!("{:04}-{:02}", d.year(), d.month()) }
-fn cached(state: &AppState, month: &str) -> Result<Option<Snapshot>, String> { state.store.get(&format!("month:{month}"))?.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose() }
+fn cached(state: &AppState, month: &str) -> Result<Option<Snapshot>, String> { state.store.get(&format!("month:v2:{month}"))?.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose() }
 async fn sync(state: &AppState, month: &str, force: bool) -> Result<Snapshot, String> {
     if !force { if let Some(snapshot) = cached(state, month)? { return Ok(snapshot); } }
     if !state.auth.status() { return Ok(Snapshot { events: vec![], tasks: vec![], task_lists: vec![], calendars: vec![], cached_at: String::new(), offline: false }); }
+    let generation = state.auth.generation();
     match state.google.month(&state.auth, &state.store, month).await {
-        Ok(snapshot) => { state.store.set(&format!("month:{month}"), &serde_json::to_string(&snapshot).map_err(|e| e.to_string())?)?; Ok(snapshot) }
+        Ok(snapshot) => { state.auth.store_if_current(generation, || state.store.set(&format!("month:v2:{month}"), &serde_json::to_string(&snapshot).map_err(|e| e.to_string())?))?; Ok(snapshot) }
         Err(err) => {
+            if generation != state.auth.generation() { return Err("데이터가 변경되어 이전 동기화를 중단했습니다".into()); }
             if err.starts_with("Google 인증 갱신 실패") || err.starts_with("Google API 401") { return Err(format!("Google 계정에 다시 로그인하세요. {err}")); }
             if err.starts_with("Google API 4") { return Err(err); }
             if let Some(mut snapshot) = cached(state, month)? { snapshot.offline = true; Ok(snapshot) } else { Err(err) }
@@ -35,7 +37,7 @@ fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
 }
 #[tauri::command]
 fn save_settings(app: tauri::AppHandle, win: WebviewWindow, state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
-    if !(35..=100).contains(&settings.opacity) || settings.width < 600 || settings.height < 400 || !matches!(settings.theme.as_str(), "midnight" | "ocean" | "forest") { return Err("잘못된 화면 설정입니다".into()); }
+    if !(35..=100).contains(&settings.opacity) || settings.width < 600 || settings.height < 400 || !matches!(settings.theme.as_str(), "midnight" | "ocean" | "forest" | "light" | "vintage") { return Err("잘못된 화면 설정입니다".into()); }
     let manager = app.autolaunch();
     if settings.autostart { manager.enable().map_err(|e| e.to_string())?; } else { manager.disable().map_err(|e| e.to_string())?; }
     platform::apply(&win, settings.desktop_mode)?;
@@ -59,21 +61,29 @@ async fn sign_in(state: State<'_, AppState>, client_id: String) -> Result<(), St
 }
 #[tauri::command]
 fn sign_out(state: State<'_, AppState>) -> Result<(), String> { state.auth.sign_out()?; state.store.clear_cache() }
+fn changed(state: &AppState) {
+    if let Err(err) = state.auth.invalidate_syncs() { eprintln!("invalidate syncs: {err}"); }
+    if let Err(err) = state.store.clear_cache() { eprintln!("clear cache: {err}"); }
+}
 #[tauri::command]
 async fn sync_month(state: State<'_, AppState>, month: String, force: bool) -> Result<Snapshot, String> {
     *state.month.lock().map_err(|e| e.to_string())? = month.clone();
     sync(&state, &month, force).await
 }
 #[tauri::command]
-async fn save_event(state: State<'_, AppState>, input: EventInput) -> Result<(), String> { state.google.save_event(&state.auth, &state.store, input).await }
+fn cached_month(state: State<'_, AppState>, month: String) -> Result<Option<Snapshot>, String> { cached(&state, &month) }
 #[tauri::command]
-async fn delete_event(state: State<'_, AppState>, calendar_id: String, event_id: String) -> Result<(), String> { state.google.delete_event(&state.auth, &state.store, &calendar_id, &event_id).await }
+async fn prefetch_month(state: State<'_, AppState>, month: String) -> Result<(), String> { sync(&state, &month, false).await.map(|_| ()) }
 #[tauri::command]
-async fn save_task(state: State<'_, AppState>, input: TaskInput) -> Result<(), String> { state.google.save_task(&state.auth, &state.store, input).await }
+async fn save_event(state: State<'_, AppState>, input: EventInput) -> Result<serde_json::Value, String> { let saved = state.google.save_event(&state.auth, &state.store, input).await?; changed(&state); Ok(saved) }
 #[tauri::command]
-async fn complete_task(state: State<'_, AppState>, list_id: String, task_id: String, completed: bool) -> Result<(), String> { state.google.complete_task(&state.auth, &state.store, &list_id, &task_id, completed).await }
+async fn delete_event(state: State<'_, AppState>, calendar_id: String, event_id: String) -> Result<(), String> { state.google.delete_event(&state.auth, &state.store, &calendar_id, &event_id).await?; changed(&state); Ok(()) }
 #[tauri::command]
-async fn delete_task(state: State<'_, AppState>, list_id: String, task_id: String) -> Result<(), String> { state.google.delete_task(&state.auth, &state.store, &list_id, &task_id).await }
+async fn save_task(state: State<'_, AppState>, input: TaskInput) -> Result<serde_json::Value, String> { let saved = state.google.save_task(&state.auth, &state.store, input).await?; changed(&state); Ok(saved) }
+#[tauri::command]
+async fn complete_task(state: State<'_, AppState>, list_id: String, task_id: String, completed: bool) -> Result<(), String> { state.google.complete_task(&state.auth, &state.store, &list_id, &task_id, completed).await?; changed(&state); Ok(()) }
+#[tauri::command]
+async fn delete_task(state: State<'_, AppState>, list_id: String, task_id: String) -> Result<(), String> { state.google.delete_task(&state.auth, &state.store, &list_id, &task_id).await?; changed(&state); Ok(()) }
 #[tauri::command]
 fn open_link(url: String) -> Result<(), String> {
     let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
@@ -149,7 +159,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event { api.prevent_close(); let _ = window.hide(); }
         })
-        .invoke_handler(tauri::generate_handler![get_settings, save_settings, save_window_geometry, auth_status, sign_in, sign_out, sync_month, save_event, delete_event, save_task, complete_task, delete_task, open_link])
+        .invoke_handler(tauri::generate_handler![get_settings, save_settings, save_window_geometry, auth_status, sign_in, sign_out, sync_month, cached_month, prefetch_month, save_event, delete_event, save_task, complete_task, delete_task, open_link])
         .run(tauri::generate_context!())
         .expect("failed to run Desktop Calendar");
 }

@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::RngCore;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{io::{Read, Write}, net::TcpListener, sync::Mutex, time::{Duration, Instant}};
+use std::{io::{Read, Write}, net::TcpListener, sync::{atomic::{AtomicU64, Ordering}, Mutex}, time::{Duration, Instant}};
 use url::Url;
 use crate::storage::Storage;
 
@@ -21,13 +21,20 @@ fn token_error(prefix: &str, status: reqwest::StatusCode, body: &str) -> String 
 struct TokenReply { access_token: String, refresh_token: Option<String>, expires_in: u64 }
 struct Token { access: String, expires_at: Instant }
 
-pub struct Auth { token: Mutex<Option<Token>>, http: reqwest::Client }
+pub struct Auth { token: Mutex<Option<Token>>, http: reqwest::Client, generation: AtomicU64 }
 
 impl Auth {
-    pub fn new(http: reqwest::Client) -> Self { Self { token: Mutex::new(None), http } }
+    pub fn new(http: reqwest::Client) -> Self { Self { token: Mutex::new(None), http, generation: AtomicU64::new(0) } }
+    pub fn generation(&self) -> u64 { self.generation.load(Ordering::SeqCst) }
+    pub fn invalidate_syncs(&self) -> Result<(), String> { let _token = self.token.lock().map_err(|e| e.to_string())?; self.generation.fetch_add(1, Ordering::SeqCst); Ok(()) }
+    pub fn store_if_current(&self, generation: u64, write: impl FnOnce() -> Result<(), String>) -> Result<(), String> {
+        let _token = self.token.lock().map_err(|e| e.to_string())?;
+        if generation != self.generation() { return Err("데이터가 변경되어 이전 동기화를 중단했습니다".into()); }
+        write()
+    }
     fn entry() -> Result<keyring::Entry, String> { keyring::Entry::new(SERVICE, "google-refresh-token").map_err(|e| e.to_string()) }
     pub fn status(&self) -> bool { self.token.lock().map(|t| t.is_some()).unwrap_or(false) || Self::entry().and_then(|e| e.get_password().map_err(|e| e.to_string())).is_ok() }
-    pub fn sign_out(&self) -> Result<(), String> { if let Ok(entry) = Self::entry() { if let Err(e) = entry.delete_credential() { if !matches!(e, keyring::Error::NoEntry) { return Err(e.to_string()); } } } *self.token.lock().map_err(|e| e.to_string())? = None; Ok(()) }
+    pub fn sign_out(&self) -> Result<(), String> { if let Ok(entry) = Self::entry() { if let Err(e) = entry.delete_credential() { if !matches!(e, keyring::Error::NoEntry) { return Err(e.to_string()); } } } let mut token = self.token.lock().map_err(|e| e.to_string())?; *token = None; self.generation.fetch_add(1, Ordering::SeqCst); Ok(()) }
     fn set_token(&self, reply: TokenReply) -> Result<(), String> {
         if let Some(refresh) = reply.refresh_token { Self::entry()?.set_password(&refresh).map_err(|e| e.to_string())?; }
         else if Self::entry()?.get_password().is_err() { return Err("Google이 갱신 토큰을 반환하지 않았습니다. 다시 로그인하세요".into()); }
@@ -89,6 +96,8 @@ impl Auth {
         let response = self.http.post("https://oauth2.googleapis.com/token").form(&form).send().await.map_err(|e| e.to_string())?;
         let status = response.status(); let body = response.text().await.map_err(|e| e.to_string())?;
         if !status.is_success() { return Err(token_error("Google 로그인 실패", status, &body)); }
-        self.set_token(serde_json::from_str(&body).map_err(|e| e.to_string())?)
+        self.set_token(serde_json::from_str(&body).map_err(|e| e.to_string())?)?;
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        Ok(())
     }
 }

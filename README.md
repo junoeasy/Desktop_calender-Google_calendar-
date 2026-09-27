@@ -45,11 +45,13 @@ For an external OAuth consent screen left in **Testing** status, Google expires 
 
 Closing the calendar hides it in the system tray. Click the tray icon or choose **달력 열기 (클릭 가능)** to open an interactive window. Choose **바탕화면에 고정** to keep the widget behind ordinary windows. On Windows this is a clickable bottom-layer window; the WorkerW desktop-icon layer is not used because it intercepted pointer input. The tray also offers sync and quit. The app keeps syncing every five minutes while running. X11 attempts desktop placement, then falls back to a bottom-layer window if it fails. Wayland runs as a normal widget window. New installs start in interactive window mode; enable desktop mode in Settings after signing in.
 
-Recurring events are shown, but editing a recurring instance or series opens Google Calendar. An ordinary event can be created, changed, or deleted in the app. Calendar writes go to the primary calendar; task writes go to the chosen task list.
+Recurring events are shown, but editing a recurring instance or series opens Google Calendar. An ordinary event can be created, changed, or deleted in the app. New events can be assigned to a visible, writable calendar; task writes go to the chosen task list.
 
 The sidebar lists available calendars with visibility checkboxes. Unchecking a calendar hides its events from the month grid and selected-day agenda without changing Google Calendar; the choice is saved locally. The task agenda shows only incomplete tasks due on the selected date. Tasks without a due date are not shown in the selected-day agenda.
 
-The month starts on Sunday. Settings offers Midnight, Ocean, and Forest themes; the choice is restored on launch. The refresh button shows a spinning icon while its request is running.
+The month starts on Sunday. Settings offers Midnight, Ocean, Forest, Light, and Vintage themes with color indicators; the choice is restored on launch. The refresh button shows a spinning icon while its request is running. Event and task forms use the native date input; event times use the native time input.
+
+When opening another month, the app displays its SQLite snapshot immediately; snapshots older than five minutes refresh from Google. Each month fetch includes the neighboring dates visible in its grid. Calendar and task-list requests run concurrently. After loading the current month, the app preloads the previous and next months without changing the selected month. New events can be assigned to a visible, writable calendar and the app focuses their saved date.
 
 ## Manual verification
 
