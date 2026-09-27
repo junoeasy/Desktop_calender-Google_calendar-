@@ -16,7 +16,7 @@ fn current_month() -> String { let d = Local::now(); format!("{:04}-{:02}", d.ye
 fn cached(state: &AppState, month: &str) -> Result<Option<Snapshot>, String> { state.store.get(&format!("month:{month}"))?.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose() }
 async fn sync(state: &AppState, month: &str, force: bool) -> Result<Snapshot, String> {
     if !force { if let Some(snapshot) = cached(state, month)? { return Ok(snapshot); } }
-    if !state.auth.status() { return Ok(Snapshot { events: vec![], tasks: vec![], task_lists: vec![], cached_at: String::new(), offline: false }); }
+    if !state.auth.status() { return Ok(Snapshot { events: vec![], tasks: vec![], task_lists: vec![], calendars: vec![], cached_at: String::new(), offline: false }); }
     match state.google.month(&state.auth, &state.store, month).await {
         Ok(snapshot) => { state.store.set(&format!("month:{month}"), &serde_json::to_string(&snapshot).map_err(|e| e.to_string())?)?; Ok(snapshot) }
         Err(err) => {
@@ -35,7 +35,7 @@ fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
 }
 #[tauri::command]
 fn save_settings(app: tauri::AppHandle, win: WebviewWindow, state: State<'_, AppState>, settings: Settings) -> Result<(), String> {
-    if !(35..=100).contains(&settings.opacity) || settings.width < 600 || settings.height < 400 { return Err("잘못된 화면 설정입니다".into()); }
+    if !(35..=100).contains(&settings.opacity) || settings.width < 600 || settings.height < 400 || !matches!(settings.theme.as_str(), "midnight" | "ocean" | "forest") { return Err("잘못된 화면 설정입니다".into()); }
     let manager = app.autolaunch();
     if settings.autostart { manager.enable().map_err(|e| e.to_string())?; } else { manager.disable().map_err(|e| e.to_string())?; }
     platform::apply(&win, settings.desktop_mode)?;

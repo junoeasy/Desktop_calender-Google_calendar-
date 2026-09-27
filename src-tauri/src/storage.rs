@@ -5,6 +5,10 @@ use std::path::PathBuf;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub client_id: String,
+    #[serde(default)]
+    pub hidden_calendar_ids: Vec<String>,
+    #[serde(default = "default_theme")]
+    pub theme: String,
     pub opacity: u8,
     pub desktop_mode: bool,
     pub autostart: bool,
@@ -14,8 +18,10 @@ pub struct Settings {
     pub height: u32,
 }
 
+fn default_theme() -> String { "midnight".into() }
+
 impl Default for Settings {
-    fn default() -> Self { Self { client_id: String::new(), opacity: 88, desktop_mode: false, autostart: false, x: None, y: None, width: 1100, height: 740 } }
+    fn default() -> Self { Self { client_id: String::new(), hidden_calendar_ids: Vec::new(), theme: default_theme(), opacity: 88, desktop_mode: false, autostart: false, x: None, y: None, width: 1100, height: 740 } }
 }
 
 #[derive(Clone)]

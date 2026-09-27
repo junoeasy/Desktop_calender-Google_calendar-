@@ -47,6 +47,10 @@ Closing the calendar hides it in the system tray. Click the tray icon or choose 
 
 Recurring events are shown, but editing a recurring instance or series opens Google Calendar. An ordinary event can be created, changed, or deleted in the app. Calendar writes go to the primary calendar; task writes go to the chosen task list.
 
+The sidebar lists available calendars with visibility checkboxes. Unchecking a calendar hides its events from the month grid and selected-day agenda without changing Google Calendar; the choice is saved locally. The task agenda shows only incomplete tasks due on the selected date. Tasks without a due date are not shown in the selected-day agenda.
+
+The month starts on Sunday. Settings offers Midnight, Ocean, and Forest themes; the choice is restored on launch. The refresh button shows a spinning icon while its request is running.
+
 ## Manual verification
 
 - Sign in, quit, relaunch, sync, and sign out. Confirm the account data disappears after sign out.

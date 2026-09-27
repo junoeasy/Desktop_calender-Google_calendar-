@@ -12,7 +12,9 @@ pub struct Task { pub id: String, pub list_id: String, pub title: String, pub no
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TaskList { pub id: String, pub title: String }
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Snapshot { pub events: Vec<CalendarEvent>, pub tasks: Vec<Task>, pub task_lists: Vec<TaskList>, pub cached_at: String, pub offline: bool }
+pub struct Calendar { pub id: String, pub title: String, pub color: String }
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Snapshot { pub events: Vec<CalendarEvent>, pub tasks: Vec<Task>, pub task_lists: Vec<TaskList>, #[serde(default)] pub calendars: Vec<Calendar>, pub cached_at: String, pub offline: bool }
 #[derive(Deserialize)]
 pub struct EventInput { pub id: Option<String>, pub calendar_id: String, pub title: String, pub start: String, pub end: String, pub all_day: bool }
 #[derive(Deserialize)]
@@ -45,7 +47,7 @@ impl Google {
     }
     fn path(base: &str, segments: &[&str]) -> Result<Url, String> {
         let mut url = Url::parse(base).map_err(|e| e.to_string())?;
-        { let mut path = url.path_segments_mut().map_err(|_| "잘못된 API 경로")?; path.extend(segments.iter().copied()); }
+        { let mut path = url.path_segments_mut().map_err(|_| "잘못된 API 경로")?; path.pop_if_empty().extend(segments.iter().copied()); }
         Ok(url)
     }
     pub async fn month(&self, auth: &Auth, store: &Storage, month: &str) -> Result<Snapshot, String> {
@@ -55,11 +57,13 @@ impl Google {
         let to = Local.with_ymd_and_hms(next.0, next.1, 1, 0, 0, 0).single().ok_or("잘못된 월 종료일")?.to_rfc3339();
         let calendars = self.pages(auth, store, Url::parse("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250").unwrap()).await?;
         let mut events = Vec::new();
-        for cal in calendars.iter().filter(|c| !c["hidden"].as_bool().unwrap_or(false) && c["selected"].as_bool().unwrap_or(true)) {
+        let mut calendar_list = Vec::new();
+        for cal in calendars.iter().filter(|c| !c["hidden"].as_bool().unwrap_or(false)) {
             let Some(id) = cal["id"].as_str() else { continue };
+            let color = cal["backgroundColor"].as_str().unwrap_or("#9d8cf7").to_string();
+            calendar_list.push(Calendar { id: id.into(), title: cal["summary"].as_str().unwrap_or(id).into(), color: color.clone() });
             let mut url = Self::path("https://www.googleapis.com/calendar/v3/calendars/", &[id, "events"])?;
             url.query_pairs_mut().append_pair("timeMin", &from).append_pair("timeMax", &to).append_pair("singleEvents", "true").append_pair("showDeleted", "false").append_pair("maxResults", "2500");
-            let color = cal["backgroundColor"].as_str().unwrap_or("#9d8cf7").to_string();
             let writable = matches!(cal["accessRole"].as_str(), Some("owner" | "writer"));
             for e in self.pages(auth, store, url).await? {
                 if e["status"] == "cancelled" { continue; }
@@ -84,7 +88,7 @@ impl Google {
                 tasks.push(Task { id: task_id.into(), list_id: id.into(), title: task["title"].as_str().unwrap_or("(제목 없음)").into(), notes: task["notes"].as_str().unwrap_or("").into(), due: task["due"].as_str().map(str::to_owned), completed: task["status"] == "completed" });
             }
         }
-        Ok(Snapshot { events, tasks, task_lists, cached_at: Utc::now().to_rfc3339(), offline: false })
+        Ok(Snapshot { events, tasks, task_lists, calendars: calendar_list, cached_at: Utc::now().to_rfc3339(), offline: false })
     }
     pub async fn save_event(&self, auth: &Auth, store: &Storage, input: EventInput) -> Result<(), String> {
         if input.title.trim().is_empty() { return Err("일정 제목이 비어 있습니다".into()); }
@@ -125,4 +129,8 @@ fn parse_month(s: &str) -> Result<(i32,u32), String> {
 mod tests {
     use super::*;
     #[test] fn month_validation() { assert_eq!(parse_month("2026-09").unwrap(), (2026,9)); assert!(parse_month("2026-13").is_err()); assert!(parse_month("2026-9").is_err()); }
+    #[test] fn api_path_has_no_empty_segment() {
+        let url = Google::path("https://www.googleapis.com/calendar/v3/calendars/", &["user@gmail.com", "events"]).unwrap();
+        assert_eq!(url.path(), "/calendar/v3/calendars/user@gmail.com/events");
+    }
 }
